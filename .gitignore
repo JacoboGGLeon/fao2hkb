@@ -1,0 +1,27 @@
+# Entornos
+.venv/
+env/
+venv/
+
+# Artefactos de ejecución
+runs/
+artifacts/
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# egg-info
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Sistema
+.DS_Store
+Thumbs.db
+MAPPING.md

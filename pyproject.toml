@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fao2hkb"
+version = "0.1.0"
+description = "FAOSTAT Bulk Downloads → Hierarchical Knowledge Base (HKB) generator."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Jacobo Gerardo González León"}]
+dependencies = [
+  "pydantic>=2.6",
+  "pyyaml>=6.0",
+  "requests>=2.31",
+  "tqdm>=4.66",
+  "pandas>=2.0",
+  "numpy>=1.23",
+  "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+embeddings = [
+  "torch",
+  "transformers>=4.40,<5",
+  "sentence-transformers",
+  "accelerate",
+  "safetensors",
+  "huggingface_hub",
+]
+viz = [
+  "matplotlib",
+  "scikit-learn",
+]
+dev = [
+  "ruff",
+  "pytest",
+]
+
+[project.scripts]
+fao2hkb = "fao2hkb.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
