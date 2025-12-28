@@ -1,6 +1,6 @@
 # fao2hkb
 
-Drive-agnostic FAOSTAT **Bulk Downloads** → **Hierarchical Knowledge Base (HKB)** generator.
+FAOSTAT **Bulk Downloads** → **Hierarchical Knowledge Base (HKB)** generator.
 
 ## Quick start
 
