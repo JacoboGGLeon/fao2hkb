@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 # ─────────────────────────────────────────────────────────────
 # Schema version
 # ─────────────────────────────────────────────────────────────
-SCHEMA_VERSION: str = "v29_00"
+SCHEMA_VERSION: str = "v_0_1_0"
 
 # ─────────────────────────────────────────────────────────────
 # Canon dims (3-level HKB)
@@ -322,26 +322,7 @@ class RecordsL1Entry(BaseModel):
     schema_version: str = SCHEMA_VERSION
 
     identity: RecordsIdentity
-
-    year_min: Optional[int] = None
-    year_max: Optional[int] = None
-    n_members: int = 0
-
     data: List[RecordItem] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _fill_l1_stats_if_missing(self) -> "RecordsL1Entry":
-        if self.data:
-            years = [it.Year for it in self.data]
-            if years:
-                if self.year_min is None:
-                    self.year_min = int(min(years))
-                if self.year_max is None:
-                    self.year_max = int(max(years))
-                if not self.n_members:
-                    self.n_members = int(len(self.data))
-        return self
-
 
 # ---------- JSONL helpers ----------
 def jsonl_dumps(obj: Any) -> str:

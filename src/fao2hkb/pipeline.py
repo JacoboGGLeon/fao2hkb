@@ -389,9 +389,6 @@ class FAO2HKBPipeline:
             # -------------------------
             records_entry = schemas.RecordsL1Entry(
                 identity=schemas.RecordsIdentity(domain_key=domain_key, series_key=series_key),
-                year_min=year_min,
-                year_max=year_max,
-                n_members=n_members,
                 data=[schemas.RecordItem(Year=d["Year"], Value=d["Value"]) for d in recs2],
             )
             l1_rows.append(records_entry.model_dump())
@@ -403,18 +400,22 @@ class FAO2HKBPipeline:
                 device=cfg.embeddings.device,
                 batch_size=cfg.embeddings.batch_size,
             )
+            norm = bool(getattr(cfg.embeddings, "l2_normalize", False))
+
             if "l3" in cfg.embeddings.levels:
                 texts = [r["description"]["string"] for r in l3_rows]
-                vecs = emb.encode(texts)
+                vecs = emb.encode(texts, normalize=norm) if texts else np.zeros((0, 0), dtype=np.float32)
                 for r, v in zip(l3_rows, vecs):
                     r["description"]["embedding"] = v.tolist()
-                    r["embedding_meta"]["embedding_dim"] = int(vecs.shape[1])
+                    r["embedding_meta"]["embedding_dim"] = int(vecs.shape[1]) if vecs.size else 0
+
             if "l2" in cfg.embeddings.levels:
                 texts = [r["description"]["string"] for r in l2_rows]
-                vecs = emb.encode(texts) if texts else np.zeros((0, 0), dtype=np.float32)
+                vecs = emb.encode(texts, normalize=norm) if texts else np.zeros((0, 0), dtype=np.float32)
                 for r, v in zip(l2_rows, vecs):
                     r["description"]["embedding"] = v.tolist()
                     r["embedding_meta"]["embedding_dim"] = int(vecs.shape[1]) if vecs.size else 0
+
 
         # Write JSONL artifacts
         domain_path = self.data_dir / "DOMAIN.jsonl"
@@ -426,7 +427,7 @@ class FAO2HKBPipeline:
         write_jsonl(records_path, l1_rows)
 
         # counts: domains, series, total points (Year-Value)
-        points_total = sum(int(r.get("n_members", 0)) for r in l1_rows)
+        points_total = sum(int(s["properties"].get("n_members", 0)) for s in l2_rows)
 
         # Manifest (integrity-first)
         manifest = {

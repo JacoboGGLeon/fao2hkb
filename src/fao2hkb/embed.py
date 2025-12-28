@@ -22,8 +22,15 @@ class Embedder:
         dev = None if self.device == "auto" else self.device
         return SentenceTransformer(self.model_name, device=dev)
 
-    def encode(self, texts: Sequence[str]) -> np.ndarray:
+    def encode(self, texts: Sequence[str], *, normalize: bool = False) -> np.ndarray:
         model = self._lazy_load()
         bs = None if self.batch_size == "auto" else int(self.batch_size)
-        emb = model.encode(list(texts), batch_size=bs, show_progress_bar=True, normalize_embeddings=False)
+        emb = model.encode(
+            list(texts),
+            batch_size=bs,
+            show_progress_bar=True,
+            normalize_embeddings=bool(normalize),
+        )
         return np.asarray(emb, dtype=np.float32)
+
+
