@@ -1,0 +1,40 @@
+run:
+  run_id: "FAO2HKB_EXAMPLE"
+  output_root: "./runs"
+  overwrite_downloads: false
+  seed: 42
+
+io:
+  raw_dir: "raw"
+  work_dir: "work"
+  artifacts_dir: "artifacts"
+
+build:
+  include_codes: true
+  drop_columns_regex: ".*(Source|Flag|Note|Unnamed).*"
+
+embeddings:
+  enabled: false
+
+packaging:
+  tar_gz: true
+  include_raw: false
+
+reproducibility:
+  record_env: true
+  record_pip_freeze: true
+
+sources:
+  - table: 1
+    url: "https://bulks-faostat.fao.org/production/Emissions_Land_Use_Forests_E_All_Data_(Normalized).zip"
+    meta:
+      Domain: "Climate Change: Agrifood systems emissions"
+      Sub_domain: "Land use and change"
+      Domain_table: "Emissions from Forests"
+
+  - table: 2
+    url: "https://bulks-faostat.fao.org/production/Emissions_Agriculture_Energy_E_All_Data_(Normalized).zip"
+    meta:
+      Domain: "Climate Change: Agrifood systems emissions"
+      Sub_domain: "Farm gate"
+      Domain_table: "Emissions from Energy use in agriculture"
