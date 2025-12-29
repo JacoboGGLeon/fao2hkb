@@ -20,12 +20,11 @@ embeddings:
   device: "auto"
   max_seq_length: 1024
   batch_size: 1024  
-  encode_chunk_size: 10000
   l2_normalize: true
 
 packaging:
   tar_gz: true
-  include_raw: false
+  include_raw: true
 
 reproducibility:
   record_env: true
@@ -33,15 +32,15 @@ reproducibility:
 
 sources:
   - table: 1
-    url: "https://bulks-faostat.fao.org/production/Emissions_Land_Use_Forests_E_All_Data_(Normalized).zip"
+    url: https://bulks-faostat.fao.org/production/Emissions_Totals_E_All_Data_(Normalized).zip
     meta:
-      Domain: "Climate Change: Agrifood systems emissions"
-      Sub_domain: "Land use and change"
-      Domain_table: "Emissions from Forests"
+      Domain: 'Climate Change: Agrifood systems emissions'
+      Sub_domain: Totals and Indicators
+      Domain_table: Emissions totals
 
   - table: 2
-    url: "https://bulks-faostat.fao.org/production/Emissions_Agriculture_Energy_E_All_Data_(Normalized).zip"
+    url: "https://bulks-faostat.fao.org/production/Production_Indices_E_All_Data_(Normalized).zip"
     meta:
-      Domain: "Climate Change: Agrifood systems emissions"
-      Sub_domain: "Farm gate"
-      Domain_table: "Emissions from Energy use in agriculture"
+      Domain: "Production"
+      Sub_domain: "Production Indices"
+      Domain_table: "Production Indices"

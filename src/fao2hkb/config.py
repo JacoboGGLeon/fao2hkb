@@ -96,7 +96,6 @@ class EmbeddingsConfig(BaseModel):
       device: "auto"          # o "cuda"/"cpu"
       batch_size: "auto"      # o un entero
       max_seq_length: 1024
-      encode_chunk_size: 25000
       l2_normalize: true
     """
 
@@ -114,7 +113,6 @@ class EmbeddingsConfig(BaseModel):
 
     # Extra hyperparams (con defaults razonables del notebook)
     max_seq_length: int = 1024
-    encode_chunk_size: int = 25000
     l2_normalize: bool = True
 
 
