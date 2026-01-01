@@ -16,6 +16,7 @@ from .embed import Embedder
 from .storage import LocalBackend, StorageBackend
 from . import schemas
 from .utils import now_utc_iso, sha256_file, set_seeds, slug, write_json, write_jsonl
+from .execution import ExecutionTracker, tracked
 
 
 # -------------------------
@@ -120,7 +121,7 @@ class BuildOutput:
 class FAO2HKBPipeline:
     """Drive-agnostic FAOSTAT Bulk Download → HKB generator."""
 
-    def __init__(self, cfg: HKBConfig, storage: Optional[StorageBackend] = None):
+    def __init__(self, cfg: HKBConfig, storage: Optional[StorageBackend] = None, *, execution: bool = False):
         self.cfg = cfg
         self.storage: StorageBackend = storage or LocalBackend()
 
@@ -136,6 +137,11 @@ class FAO2HKBPipeline:
         for p in [self.raw_dir, self.work_dir, self.data_dir, self.repro_dir]:
             self.storage.mkdir(p)
 
+
+        # Optional execution timeline (written under <run_dir>/work/execution/ when enabled)
+        self.exec = ExecutionTracker(self.work_dir, enabled=bool(execution), run_id=str(cfg.run.run_id))
+        if self.exec.enabled:
+            self.exec.mark("pipeline.init", run_dir=str(self.run_dir))
         # Persist resolved config for auditability
         self.storage.write_bytes(
             self.run_dir / "config.resolved.yaml",
@@ -146,44 +152,67 @@ class FAO2HKBPipeline:
     # Download
     # -------------------------
 
+
+    @tracked(
+        "download.table",
+        meta=lambda a, k: {"table": getattr(a[1], "table", None), "url": getattr(a[1], "url", None)},
+    )
+    def _download_one_source(self, s: Any, *, overwrite: bool) -> str:
+        name = f"table_{s.table:02d}__{slug(str(s.meta.get('Domain_table', 'faostat')))}.zip"
+        dst = self.raw_dir / name
+        download_file(s.url, dst, overwrite=overwrite)
+        return str(dst)
+
+    @tracked(
+        "load.table",
+        meta=lambda a, k: {"table": getattr(a[1], "table", None)},
+    )
+    def _load_one_source(self, s: Any) -> pd.DataFrame:
+        name = f"table_{s.table:02d}__{slug(str(s.meta.get('Domain_table', 'faostat')))}.zip"
+        zip_path = self.raw_dir / name
+        if not zip_path.exists():
+            raise FileNotFoundError(f"Missing source zip (run download_data first): {zip_path}")
+        df = _read_csv_from_zip(zip_path)
+        df = _normalize_columns(df)
+        for k, v in (s.meta or {}).items():
+            df[k] = v
+        df["__source_table__"] = s.table
+        df["__source_url__"] = s.url
+        return df
+
+    @tracked(
+        "embeddings.encode",
+        meta=lambda a, k: {"level": a[1], "n_texts": len(a[2]) if len(a) > 2 and a[2] is not None else 0},
+    )
+    def _encode_embeddings(self, level: str, texts: List[str], emb: Embedder, *, normalize: bool) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, 0), dtype=np.float32)
+        return emb.encode(texts, normalize=bool(normalize))
+
+    @tracked(
+        "artifacts.write_jsonl",
+        meta=lambda a, k: {"path": str(a[1]), "n_rows": len(a[2]) if len(a) > 2 and a[2] is not None else 0},
+    )
+    def _write_jsonl(self, path: Path, rows: List[Dict[str, Any]]) -> None:
+        write_jsonl(path, rows)
+
+    @tracked("download_data")
     def download_data(self, overwrite: bool = False) -> List[str]:
         out_paths = []
         for s in self.cfg.sources:
-            name = f"table_{s.table:02d}__{slug(str(s.meta.get('Domain_table', 'faostat')))}.zip"
-            dst = self.raw_dir / name
-            download_file(s.url, dst, overwrite=overwrite)
-            out_paths.append(str(dst))
+            out_paths.append(self._download_one_source(s, overwrite=overwrite))
         return out_paths
-
-    # -------------------------
-    # Load
-    # -------------------------
-
+    @tracked("load_normalized_faostat")
     def load_normalized_faostat(self) -> pd.DataFrame:
         """Load all selected normalized FAOSTAT tables into one DataFrame."""
         frames = []
         for s in self.cfg.sources:
-            name = f"table_{s.table:02d}__{slug(str(s.meta.get('Domain_table', 'faostat')))}.zip"
-            zip_path = self.raw_dir / name
-            if not zip_path.exists():
-                raise FileNotFoundError(f"Missing source zip (run download_data first): {zip_path}")
-            df = _read_csv_from_zip(zip_path)
-            df = _normalize_columns(df)
-            # attach L3 meta (as columns)
-            for k, v in (s.meta or {}).items():
-                df[k] = v
-            df["__source_table__"] = s.table
-            df["__source_url__"] = s.url
-            frames.append(df)
+            frames.append(self._load_one_source(s))
         if not frames:
             return pd.DataFrame()
         df_all = pd.concat(frames, ignore_index=True)
         return df_all
-
-    # -------------------------
-    # Build HKB
-    # -------------------------
-
+    @tracked("build_hkb_jsonl")
     def build_hkb_jsonl(self, df_all: pd.DataFrame) -> Dict[str, Any]:
         cfg = self.cfg
         b = cfg.build
@@ -404,14 +433,14 @@ class FAO2HKBPipeline:
 
             if "l3" in cfg.embeddings.levels:
                 texts = [r["description"]["string"] for r in l3_rows]
-                vecs = emb.encode(texts, normalize=norm) if texts else np.zeros((0, 0), dtype=np.float32)
+                vecs = self._encode_embeddings("l3", texts, emb, normalize=norm)
                 for r, v in zip(l3_rows, vecs):
                     r["description"]["embedding"] = v.tolist()
                     r["embedding_meta"]["embedding_dim"] = int(vecs.shape[1]) if vecs.size else 0
 
             if "l2" in cfg.embeddings.levels:
                 texts = [r["description"]["string"] for r in l2_rows]
-                vecs = emb.encode(texts, normalize=norm) if texts else np.zeros((0, 0), dtype=np.float32)
+                vecs = self._encode_embeddings("l2", texts, emb, normalize=norm)
                 for r, v in zip(l2_rows, vecs):
                     r["description"]["embedding"] = v.tolist()
                     r["embedding_meta"]["embedding_dim"] = int(vecs.shape[1]) if vecs.size else 0
@@ -422,9 +451,9 @@ class FAO2HKBPipeline:
         series_path = self.data_dir / "SERIES.jsonl"
         records_path = self.data_dir / "RECORDS.jsonl"
 
-        write_jsonl(domain_path, l3_rows)
-        write_jsonl(series_path, l2_rows)
-        write_jsonl(records_path, l1_rows)
+        self._write_jsonl(domain_path, l3_rows)
+        self._write_jsonl(series_path, l2_rows)
+        self._write_jsonl(records_path, l1_rows)
 
         # counts: domains, series, total points (Year-Value)
         points_total = sum(int(s["properties"].get("n_members", 0)) for s in l2_rows)
@@ -472,7 +501,7 @@ class FAO2HKBPipeline:
             counts=manifest["counts"],
         )
         return out.__dict__
-
+    @tracked("_tar_gz_one")
     def _tar_gz_one(self) -> Path:
         cfg = self.cfg
         tar_path = self.run_dir / f"{cfg.run.run_id}.tar.gz"
